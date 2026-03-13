@@ -1,0 +1,33 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+.venv/
+env/
+
+# Distribution / packaging
+dist/
+build/
+*.egg-info/
+
+# Test artifacts
+.pytest_cache/
+.coverage
+htmlcov/
+
+# IOC data and output files
+*.txt
+*.csv
+iocs/
+reports/
+output/
+results/
+
+# Editor junk
+.idea/
+.vscode/
+*.swp
+.DS_Store
