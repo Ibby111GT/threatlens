@@ -46,6 +46,12 @@ _TECHNIQUES: Dict[str, Technique] = {
              "Adversaries steal data by exfiltrating it over the C2 channel."),
     "T1486": Technique("T1486", "Data Encrypted for Impact", "Impact",
              "Adversaries encrypt data to interrupt availability."),
+    "T1595": Technique("T1595", "Active Scanning", "Reconnaissance",
+             "Adversaries probe victim infrastructure before compromise."),
+    "T1204": Technique("T1204", "User Execution", "Execution",
+             "Adversaries rely on a user opening a malicious file or link."),
+    "T1505.003": Technique("T1505.003", "Web Shell", "Persistence",
+             "Adversaries plant a web shell to maintain access to a server."),
 }
 
 
