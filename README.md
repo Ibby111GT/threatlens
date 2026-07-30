@@ -11,7 +11,7 @@ with **no API keys required** — pure Python standard library, zero dependencie
 - Offline heuristic threat scoring (0–100) with CRITICAL / HIGH / MEDIUM / LOW / INFO bands
 - DGA (domain generation algorithm) detection via entropy + consonant-run + vowel-ratio analysis
 - Suspicious TLD flagging (`.tk`, `.ml`, `.ga`, `.cf`, `.xyz`, `.top`, …)
-- Private / RFC1918 address recognition (down-weighted as internal)
+- Internal-address recognition for IPv4 **and** IPv6 — private, loopback, and link-local addresses down-weighted
 - MITRE ATT&CK technique and tactic mapping
 - Optional VirusTotal API v3 reputation lookups (`--vt-key`) folded into the score
 - Best-effort DNS resolution (`--resolve`)
@@ -76,14 +76,83 @@ only** — the VT v3 collections ThreatLens queries. URL and email IOCs are not
 looked up; for those the tool notes that VT is not implemented for the type and
 keeps the offline heuristic score.
 
-## Testing
+## How it works (plain English)
+
+*For readers who don't work in security.*
+
+**What an IOC is.** An *indicator of compromise* is a concrete artefact left
+behind when something bad happens — an IP address malware phoned home to, a
+domain in a phishing link, the fingerprint (hash) of a malicious file, an
+attacker's email address, or a vulnerability ID (CVE). ThreatLens takes a pile
+of these, works out what kind each one is, and gives each a rough risk score so
+a human knows what to look at first.
+
+**Where the score comes from.** By default everything runs on your own machine
+with no lookups at all. The score starts from how dangerous that *type* of
+indicator tends to be, then simple local rules nudge it: a domain on a
+throwaway TLD like `.tk` gets bumped up; a domain whose name looks
+machine-generated — long, random-looking, few vowels — gets bumped up more; an
+address that is clearly internal (a private range, or a loopback like
+`127.0.0.1` / `::1`) is pushed right down, because it is not an external threat.
+
+**The score is a triage hint, not a verdict.** A high number means "look at
+this first", *not* "this is confirmed malicious". A low number means "probably
+not worth your time", *not* "provably safe". The heuristics are deliberately
+simple: they will both miss real threats and flag harmless things. Treat the
+output as a prioritised worklist for an analyst, never as a final answer.
+
+**An optional second opinion.** If you have a free VirusTotal key you can pass
+`--vt-key` to fold in how many antivirus engines currently flag an indicator.
+That step is optional, needs a network connection, and only covers IPs,
+domains, and file hashes — URLs and email addresses keep their offline score.
+
+**Try it.** Run `python threat_intel.py --demo`. It scores a built-in set of
+example indicators — from a clean public DNS server to a DGA-style phishing
+domain — so you can see the output with no input, no key, and no network.
+
+## Limitations
+
+- **Scores are triage hints, not verdicts.** They rank indicators for human
+  review. A high score is "check this first", not proof of malice; a low score
+  is not a clean bill of health.
+- **The heuristics are offline and coarse.** DGA detection is entropy /
+  consonant-run / vowel-ratio based, so it will misjudge short, foreign-language,
+  or deliberately word-like malicious domains, and can flag legitimate
+  high-entropy hostnames (CDNs, hashed subdomains). The suspicious-TLD list is a
+  small fixed sample, not an exhaustive reputation feed.
+- **IPv6 classification is best-effort.** Internal-address detection leans on
+  Python's `ipaddress` module; unusual or transitional address forms may not be
+  recognised as internal.
+- **VirusTotal is optional and partial.** It covers IPs, domains, and file
+  hashes only, requires a key and network access, and its engine counts are
+  themselves noisy — treat them as one more signal, not ground truth.
+- **No sandboxing, no live intel.** ThreatLens does not detonate files, attribute
+  threat actors, or consult live feeds. The MITRE mapping is a small static table
+  hinting at likely tactics per IOC *type*, not a per-indicator determination.
+
+## Tests
 
 ```bash
-python -m unittest discover -s tests -v
+python3 -m unittest discover -v
 ```
+
+30 tests, all offline — the VirusTotal HTTP calls are mocked with
+`unittest.mock`, so the suite never opens a network connection. They cover IOC
+classification (including IPv6 validation), hostname extraction with ports and
+userinfo, offline scoring and severity bands, private / loopback / link-local
+down-weighting, DGA and suspicious-TLD flags, VirusTotal parsing and graceful
+failure, and the MITRE lookup table.
 
 ## Requirements
 
 - Python 3.10+
 - No external dependencies (pure stdlib)
 - VirusTotal API key optional
+
+## Ethical use
+
+For authorised triage of indicators from your own environment, or an engagement
+you are permitted to work. Note that `--resolve` sends the indicator to DNS and
+`--vt-key` sends it to VirusTotal, so do not submit indicators you are not
+allowed to disclose to third parties. Nothing here confirms an indicator is
+malicious — act on the output only after human review.
