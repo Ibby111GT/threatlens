@@ -9,6 +9,7 @@ layered on top by callers via `apply_reputation`.
 
 import math
 from typing import List, Tuple
+from urllib.parse import urlsplit
 
 # Free / abused TLDs frequently seen in phishing and malware campaigns.
 SUSPICIOUS_TLDS = {
@@ -68,6 +69,24 @@ def looks_like_dga(domain: str) -> bool:
     return (entropy >= 3.5 and vowel_ratio < 0.30) or longest_consonant_run >= 5 or digit_ratio >= 0.4
 
 
+def hostname_of(value: str) -> str:
+    """
+    Extract the bare hostname from a domain or URL value.
+
+    Strips scheme, userinfo, port, and path so downstream heuristics see
+    only the host (e.g. ``http://user@evil.tk:8080/x`` -> ``evil.tk``).
+    Schemeless values are parsed as ``//value`` so urlsplit still yields a
+    hostname. Returns a lowercased host, falling back to the lowercased
+    input when no host can be parsed.
+    """
+    v = (value or "").strip()
+    if not v:
+        return ""
+    parsed = urlsplit(v if "://" in v else "//" + v)
+    host = parsed.hostname
+    return host.lower() if host else v.lower()
+
+
 def suspicious_tld(domain: str) -> str:
     """Return the TLD if it is on the suspicious list, else ''."""
     tld = domain.rsplit(".", 1)[-1].lower()
@@ -105,7 +124,7 @@ def score_ioc(ioc_type: str, value: str) -> Tuple[int, str, List[str]]:
         notes.append("Private / internal address (RFC1918) -- low external risk.")
 
     if ioc_type in ("domain", "url"):
-        host = value.split("://")[-1].split("/")[0]
+        host = hostname_of(value)
         tld = suspicious_tld(host)
         if tld:
             score += 20

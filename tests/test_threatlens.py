@@ -9,6 +9,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from lib.ioc import classify, parse_ioc_list
 from lib.scoring import (
     looks_like_dga, suspicious_tld, score_ioc, severity_for, apply_reputation,
+    hostname_of,
 )
 from lib.enricher import enrich_batch
 
@@ -77,6 +78,33 @@ class TestEnrichment(unittest.TestCase):
     def test_techniques_attached(self):
         (r,) = enrich_batch(["8.8.8.8"])
         self.assertTrue(any(t.technique_id == "T1071" for t in r.techniques))
+
+
+class TestHostnameHeuristics(unittest.TestCase):
+    def test_suspicious_tld_note_survives_port(self):
+        # http://evil.tk:8080/x must still be flagged for its .tk TLD.
+        score, sev, notes = score_ioc("url", "http://evil.tk:8080/x")
+        self.assertTrue(any("Suspicious TLD .tk" in n for n in notes))
+        self.assertEqual(score, 75)
+        self.assertEqual(sev, "HIGH")
+
+    def test_dga_host_with_port_is_flagged(self):
+        # A DGA-looking host is still detected when a port is present.
+        _, _, notes = score_ioc("url", "http://kq3v9z7x1p0m4w.com:8080/x")
+        self.assertTrue(any("DGA" in n for n in notes))
+
+    def test_userinfo_and_port_stripped(self):
+        self.assertEqual(hostname_of("http://user:pass@evil.tk:8080/x"), "evil.tk")
+        self.assertEqual(hostname_of("evil.tk:8080/x"), "evil.tk")
+
+    def test_bare_and_schemeless_values_unchanged(self):
+        # Plain domains keep scoring exactly as before the port fix.
+        self.assertEqual(hostname_of("example.com"), "example.com")
+        self.assertEqual(hostname_of("kq3v9z7x1p0m4w.tk"), "kq3v9z7x1p0m4w.tk")
+        bad, _, _ = score_ioc("domain", "kq3v9z7x1p0m4w.tk")
+        clean, _, _ = score_ioc("domain", "example.com")
+        self.assertEqual(bad, 85)
+        self.assertEqual(clean, 40)
 
 
 if __name__ == "__main__":
