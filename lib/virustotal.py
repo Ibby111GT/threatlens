@@ -24,6 +24,16 @@ _ENDPOINTS = {
 }
 
 
+def supports(ioc_type: str) -> bool:
+    """
+    True when VirusTotal enrichment is implemented for this IOC type.
+
+    VT v3 collections cover IP addresses, domains, and file hashes
+    (md5/sha1/sha256); url and email IOCs are not looked up.
+    """
+    return ioc_type in _ENDPOINTS
+
+
 @dataclass
 class VTResult:
     malicious:  int

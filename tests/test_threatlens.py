@@ -1,11 +1,15 @@
 """Unit tests for ThreatLens IOC classification, scoring, and enrichment."""
 
+import json
 import os
 import sys
 import unittest
+import urllib.error
+from unittest import mock
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+from lib import mitre, virustotal
 from lib.ioc import classify, parse_ioc_list
 from lib.scoring import (
     looks_like_dga, suspicious_tld, score_ioc, severity_for, apply_reputation,
@@ -145,6 +149,82 @@ class TestPrivateIPScoring(unittest.TestCase):
     def test_ipv4_172_private_is_internal(self):
         score, _, _ = score_ioc("ip", "172.20.1.1")
         self.assertEqual(score, 10)
+
+
+def _fake_vt_response(payload):
+    """A urlopen() context-manager stand-in returning JSON bytes."""
+    cm = mock.MagicMock()
+    cm.__enter__.return_value.read.return_value = json.dumps(payload).encode("utf-8")
+    return cm
+
+
+class TestVirusTotal(unittest.TestCase):
+    def test_supported_type_parses_stats(self):
+        payload = {"data": {"attributes": {"last_analysis_stats": {
+            "malicious": 3, "suspicious": 1, "harmless": 60, "undetected": 6,
+        }}}}
+        with mock.patch("lib.virustotal.urllib.request.urlopen",
+                        return_value=_fake_vt_response(payload)):
+            res = virustotal.lookup("ip", "1.2.3.4", "KEY")
+        self.assertIsNotNone(res)
+        self.assertEqual(res.malicious, 3)
+        self.assertEqual(res.suspicious, 1)
+        self.assertEqual(res.total, 70)
+
+    def test_supports_reports_covered_types(self):
+        self.assertTrue(virustotal.supports("ip"))
+        self.assertTrue(virustotal.supports("domain"))
+        self.assertTrue(virustotal.supports("sha256"))
+        self.assertFalse(virustotal.supports("url"))
+        self.assertFalse(virustotal.supports("email"))
+
+    def test_unsupported_type_returns_none_without_network(self):
+        with mock.patch("lib.virustotal.urllib.request.urlopen",
+                        side_effect=AssertionError("network must not be touched")):
+            self.assertIsNone(virustotal.lookup("url", "http://x/y", "KEY"))
+            self.assertIsNone(virustotal.lookup("email", "a@b.com", "KEY"))
+
+    def test_network_failure_degrades_to_none(self):
+        with mock.patch("lib.virustotal.urllib.request.urlopen",
+                        side_effect=urllib.error.URLError("down")):
+            self.assertIsNone(virustotal.lookup("domain", "example.com", "KEY"))
+        with mock.patch("lib.virustotal.urllib.request.urlopen",
+                        side_effect=TimeoutError("slow")):
+            self.assertIsNone(virustotal.lookup("domain", "example.com", "KEY"))
+
+    def test_missing_stats_returns_none(self):
+        with mock.patch("lib.virustotal.urllib.request.urlopen",
+                        return_value=_fake_vt_response({"data": {"attributes": {}}})):
+            self.assertIsNone(virustotal.lookup("ip", "1.2.3.4", "KEY"))
+
+
+class TestEnricherVT(unittest.TestCase):
+    def test_unsupported_vt_type_emits_explicit_note(self):
+        # A url IOC with a key must say VT is not implemented, not "unavailable".
+        with mock.patch("lib.virustotal.urllib.request.urlopen",
+                        side_effect=AssertionError("network must not be touched")):
+            (r,) = enrich_batch(["http://evil.tk/x"], vt_key="KEY")
+        self.assertTrue(any("not implemented for url IOCs" in n for n in r.notes))
+        self.assertFalse(any("unavailable" in n for n in r.notes))
+
+
+class TestMitre(unittest.TestCase):
+    def test_lookup_is_case_insensitive_and_handles_unknown(self):
+        t = mitre.lookup("t1059")
+        self.assertIsNotNone(t)
+        self.assertEqual(t.technique_id, "T1059")
+        self.assertEqual(t.tactic, "Execution")
+        self.assertIsNone(mitre.lookup("T9999"))
+
+    def test_techniques_for_tactic_and_all_tactics(self):
+        ids = {t.technique_id for t in mitre.techniques_for_tactic("Execution")}
+        self.assertIn("T1059", ids)
+        self.assertIn("T1204", ids)
+        self.assertEqual({t.technique_id for t in mitre.techniques_for_tactic("Command and Control")},
+                         {"T1071"})
+        tactics = mitre.all_tactics()
+        self.assertEqual(tactics, sorted(tactics))
+        self.assertIn("Execution", tactics)
 
 
 if __name__ == "__main__":

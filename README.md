@@ -71,6 +71,11 @@ virustotal.com (free tier: 500 requests/day) and pass `--vt-key`. Any lookup
 failure (rate limit, network, unknown IOC) degrades gracefully back to the
 offline heuristic score.
 
+VirusTotal enrichment covers **IPs, domains, and file hashes (MD5/SHA-1/SHA-256)
+only** — the VT v3 collections ThreatLens queries. URL and email IOCs are not
+looked up; for those the tool notes that VT is not implemented for the type and
+keeps the offline heuristic score.
+
 ## Testing
 
 ```bash

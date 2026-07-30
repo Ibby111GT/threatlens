@@ -70,18 +70,24 @@ def enrich(ioc: IOC, resolve: bool = False, vt_key: Optional[str] = None) -> Enr
 
     # Optional live VirusTotal reputation, folded into the score.
     if vt_key:
-        vt = virustotal.lookup(ioc.ioc_type, ioc.value, vt_key)
-        if vt is not None:
-            enriched.vt = vt
-            enriched.score, enriched.severity = apply_reputation(
-                enriched.score, vt.malicious, vt.suspicious
-            )
+        if not virustotal.supports(ioc.ioc_type):
             enriched.notes.append(
-                f"VirusTotal: {vt.malicious} malicious / {vt.suspicious} suspicious "
-                f"of {vt.total} engines."
+                f"VirusTotal lookup not implemented for {ioc.ioc_type} IOCs; "
+                f"offline heuristics used."
             )
         else:
-            enriched.notes.append("VirusTotal lookup unavailable; offline heuristics used.")
+            vt = virustotal.lookup(ioc.ioc_type, ioc.value, vt_key)
+            if vt is not None:
+                enriched.vt = vt
+                enriched.score, enriched.severity = apply_reputation(
+                    enriched.score, vt.malicious, vt.suspicious
+                )
+                enriched.notes.append(
+                    f"VirusTotal: {vt.malicious} malicious / {vt.suspicious} suspicious "
+                    f"of {vt.total} engines."
+                )
+            else:
+                enriched.notes.append("VirusTotal lookup unavailable; offline heuristics used.")
 
     return enriched
 
