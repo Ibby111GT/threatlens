@@ -2,6 +2,7 @@
 lib/ioc.py -- Indicator of Compromise (IOC) parsing and classification.
 """
 
+import ipaddress
 import re
 from dataclasses import dataclass
 from typing import List, Optional
@@ -36,6 +37,20 @@ class IOC:
             self.raw = self.value
 
 
+def _is_ipv6(v: str) -> bool:
+    """True only for genuinely valid IPv6 literals.
+
+    The loose ``_IPV6_RE`` also matches hex-and-colon strings like
+    ``dead:beef``; confirm with ``ipaddress`` so those are not typed ip.
+    """
+    if not _IPV6_RE.match(v):
+        return False
+    try:
+        return isinstance(ipaddress.ip_address(v), ipaddress.IPv6Address)
+    except ValueError:
+        return False
+
+
 def classify(value: str) -> str:
     v = value.strip()
     if _CVE_RE.match(v):    return 'cve'
@@ -43,7 +58,7 @@ def classify(value: str) -> str:
     if _SHA1_RE.match(v):   return 'sha1'
     if _MD5_RE.match(v):    return 'md5'
     if _IPV4_RE.match(v):   return 'ip'
-    if _IPV6_RE.match(v):   return 'ip'
+    if _is_ipv6(v):         return 'ip'
     if _URL_RE.match(v):    return 'url'
     if _EMAIL_RE.match(v):  return 'email'
     if _DOMAIN_RE.match(v): return 'domain'

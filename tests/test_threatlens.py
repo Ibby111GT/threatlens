@@ -107,6 +107,19 @@ class TestHostnameHeuristics(unittest.TestCase):
         self.assertEqual(clean, 40)
 
 
+class TestIPv6Classification(unittest.TestCase):
+    def test_hex_colon_strings_are_not_ip(self):
+        self.assertNotEqual(classify("dead:beef"), "ip")
+        self.assertNotEqual(classify("abc:def"), "ip")
+
+    def test_valid_ipv6_is_ip(self):
+        self.assertEqual(classify("::1"), "ip")
+        self.assertEqual(classify("2001:db8::1"), "ip")
+
+    def test_ipv4_still_ip(self):
+        self.assertEqual(classify("8.8.8.8"), "ip")
+
+
 class TestPrivateIPScoring(unittest.TestCase):
     def test_ipv6_loopback_is_internal(self):
         score, sev, notes = score_ioc("ip", "::1")
