@@ -1,5 +1,7 @@
 # ThreatLens — IOC Enrichment & Triage
 
+[![CI](https://github.com/Ibby111GT/threatlens/actions/workflows/ci.yml/badge.svg)](https://github.com/Ibby111GT/threatlens/actions/workflows/ci.yml)
+
 A threat-intelligence tool that classifies indicators of compromise (IOCs),
 scores them with offline heuristics, maps them to MITRE ATT&CK techniques, and
 can optionally enrich them with live VirusTotal reputation. Runs fully offline
