@@ -7,6 +7,7 @@ useful with no API keys. External signals (e.g. VirusTotal) can be
 layered on top by callers via `apply_reputation`.
 """
 
+import ipaddress
 import math
 from typing import List, Tuple
 from urllib.parse import urlsplit
@@ -17,20 +18,20 @@ SUSPICIOUS_TLDS = {
     "link", "loan", "download", "zip", "mov", "country", "kim", "science",
 }
 
-# RFC1918 / loopback / link-local prefixes treated as internal (low risk).
-_PRIVATE_PREFIXES = ("10.", "192.168.", "127.", "169.254.", "0.")
-
-
 def _is_private_ip(value: str) -> bool:
-    if value.startswith(_PRIVATE_PREFIXES):
-        return True
-    if value.startswith("172."):
-        try:
-            second = int(value.split(".")[1])
-            return 16 <= second <= 31
-        except (IndexError, ValueError):
-            return False
-    return False
+    """
+    True for addresses that carry no external risk: private (RFC1918 and
+    IPv6 ULA fc00::/7), loopback, link-local, and the unspecified address.
+
+    Works for both IPv4 and IPv6 via the stdlib ``ipaddress`` module, so
+    ::1 and fc00::1 are recognised as internal just like 10.0.0.1.
+    """
+    try:
+        ip = ipaddress.ip_address(value)
+    except ValueError:
+        return False
+    return (ip.is_private or ip.is_loopback
+            or ip.is_link_local or ip.is_unspecified)
 
 
 def shannon_entropy(text: str) -> float:
@@ -121,7 +122,7 @@ def score_ioc(ioc_type: str, value: str) -> Tuple[int, str, List[str]]:
 
     if ioc_type == "ip" and _is_private_ip(value):
         score = 10
-        notes.append("Private / internal address (RFC1918) -- low external risk.")
+        notes.append("Private/loopback/link-local address -- low external risk.")
 
     if ioc_type in ("domain", "url"):
         host = hostname_of(value)

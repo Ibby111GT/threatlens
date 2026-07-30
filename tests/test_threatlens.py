@@ -107,5 +107,32 @@ class TestHostnameHeuristics(unittest.TestCase):
         self.assertEqual(clean, 40)
 
 
+class TestPrivateIPScoring(unittest.TestCase):
+    def test_ipv6_loopback_is_internal(self):
+        score, sev, notes = score_ioc("ip", "::1")
+        self.assertEqual(score, 10)
+        self.assertIn(sev, ("INFO", "LOW"))
+        self.assertTrue(any("low external risk" in n for n in notes))
+
+    def test_ipv6_ula_is_internal(self):
+        score, _, _ = score_ioc("ip", "fc00::1")
+        self.assertEqual(score, 10)
+
+    def test_internal_note_drops_rfc1918_claim(self):
+        # Loopback is RFC 1122, not RFC1918 -- the note must not misattribute.
+        _, _, notes = score_ioc("ip", "::1")
+        self.assertFalse(any("RFC1918" in n for n in notes))
+
+    def test_public_ipv4_unchanged(self):
+        score, sev, notes = score_ioc("ip", "8.8.8.8")
+        self.assertEqual(score, 40)
+        self.assertEqual(sev, "MEDIUM")
+        self.assertEqual(notes, [])
+
+    def test_ipv4_172_private_is_internal(self):
+        score, _, _ = score_ioc("ip", "172.20.1.1")
+        self.assertEqual(score, 10)
+
+
 if __name__ == "__main__":
     unittest.main()
